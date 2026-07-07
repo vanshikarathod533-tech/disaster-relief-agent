@@ -1,27 +1,27 @@
-import asyncio
+"""
+Disaster Relief Tools
+
+Plain Python functions that mirror the MCP server tools.
+These are used directly by ADK agents to avoid the stdio-based MCP session
+startup issues on Windows (SelectorEventLoop subprocess limitations).
+
+The mcp_server.py file is kept for standalone MCP server usage.
+"""
 import logging
-import os
-from mcp.server.fastmcp import FastMCP
 
-# Setup logging
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
-logger = logging.getLogger("disaster_relief_mcp")
+logger = logging.getLogger("disaster_relief_tools")
 
-# Initialize FastMCP server
-mcp = FastMCP("Disaster Relief Service")
 
-@mcp.tool()
 def get_shelters(location: str, disaster_type: str) -> str:
     """Finds nearby emergency shelters for a given location and disaster type.
-    
+
     Args:
         location: The user's current city or region.
         disaster_type: The type of disaster (e.g., flood, wildfire, earthquake).
     """
     logger.info(f"get_shelters called for location={location}, disaster={disaster_type}")
-    loc = location.lower()
     dis = disaster_type.lower()
-    
+
     if "flood" in dis:
         return (
             f"Shelters in {location} for floods:\n"
@@ -41,10 +41,10 @@ def get_shelters(location: str, disaster_type: str) -> str:
             f"2. Safe Haven Church (Capacity: 150, Status: OPEN)"
         )
 
-@mcp.tool()
+
 def get_hospitals(location: str) -> str:
     """Finds nearby hospitals and emergency medical services for a location.
-    
+
     Args:
         location: The user's current city or region.
     """
@@ -55,10 +55,10 @@ def get_hospitals(location: str) -> str:
         f"2. Red Cross Medical Tent 3 (Location: Near Town Hall, Status: ACTIVE for minor injuries)"
     )
 
-@mcp.tool()
+
 def get_weather_alerts(location: str, disaster_type: str = "general") -> str:
     """Retrieves current weather alerts and hazard levels for a location.
-    
+
     Args:
         location: The user's current city or region.
         disaster_type: The type of disaster (e.g., flood, wildfire, earthquake). Defaults to 'general'.
@@ -107,10 +107,10 @@ def get_weather_alerts(location: str, disaster_type: str = "general") -> str:
             f"- Evacuation routes are active on major highways"
         )
 
-@mcp.tool()
+
 def get_supply_checklist(disaster_type: str) -> str:
     """Gets the standard recommended emergency supply checklist for a specific disaster.
-    
+
     Args:
         disaster_type: The type of disaster (e.g., flood, wildfire, earthquake, cyclone).
     """
@@ -125,7 +125,7 @@ def get_supply_checklist(disaster_type: str) -> str:
         "- Local maps and emergency plan document\n"
         "- Cell phone with chargers and backup power bank"
     )
-    
+
     if "flood" in dis:
         return (
             f"Emergency Supply Checklist for FLOODS:\n"
@@ -147,7 +147,3 @@ def get_supply_checklist(disaster_type: str) -> str:
             f"General Emergency Supply Checklist:\n"
             f"{common}"
         )
-
-if __name__ == "__main__":
-    logger.info("Starting Disaster Relief FastMCP Server...")
-    mcp.run()

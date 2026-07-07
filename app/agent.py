@@ -54,9 +54,13 @@ safety_guide = Agent(
         retry_options=types.HttpRetryOptions(attempts=3),
     ),
     instruction=(
-        "You are an expert Safety and Evacuation Guide. Your role is to provide immediate, "
+        "You are an expert Safety and Evacuation Guide. Your role is to provide IMMEDIATE, "
         "actionable safety guidelines, weather/hazard warnings, and evacuation protocols based on the disaster type and location. "
-        "Use the available weather alert tools or checklists if needed, and respond clearly with step-by-step instructions. "
+        "CRITICAL RULES:\n"
+        "1. ALWAYS call get_supply_checklist for the disaster type provided — never skip this.\n"
+        "2. ALWAYS call get_weather_alerts using whatever location is given. If no location is specified, use 'your area' as the location parameter.\n"
+        "3. NEVER ask the user for more information. Work with what you have.\n"
+        "4. Respond with step-by-step evacuation instructions tailored to the disaster type and any special needs mentioned (pets, infants, mobility issues).\n"
         "Be direct, calm, and focus on preservation of life."
     ),
     tools=[mcp_toolset_safety]
@@ -71,9 +75,13 @@ resource_locator = Agent(
     instruction=(
         "You are an expert Resource Locator. Your role is to find nearby emergency shelters, hospitals, "
         "and medical stations. Provide precise descriptions of capacities, coordinates (if available), "
-        "pets allowed status, and other details from your tools. "
-        "Use the tools get_shelters and get_hospitals to find resources. "
-        "Be extremely detailed and accurate."
+        "pets allowed status, and other details from your tools.\n"
+        "CRITICAL RULES:\n"
+        "1. ALWAYS call get_shelters and get_hospitals — never skip these tool calls.\n"
+        "2. If no location is specified, use 'your area' as the location parameter.\n"
+        "3. If the user has pets, highlight pet-friendly shelters prominently.\n"
+        "4. If the user has infants or medical needs, highlight hospitals with trauma/NICU capabilities.\n"
+        "5. NEVER ask the user for more information. Use whatever location is given."
     ),
     tools=[mcp_toolset_resources]
 )
@@ -88,14 +96,18 @@ orchestrator = Agent(
         retry_options=types.HttpRetryOptions(attempts=3),
     ),
     instruction=(
-        "You are the main coordinator of the Disaster Relief Multi-Agent System. "
-        "Your task is to analyze the user's emergency request, location, and any special needs. "
-        "You must delegate tasks to:\n"
-        "1. safety_guide: to get safety, evacuation, and weather guidance.\n"
-        "2. resource_locator: to get shelter and hospital locations.\n"
-        "Delegate tasks to both agents using your tools. Combine the responses from safety_guide and "
-        "resource_locator into a single, comprehensive emergency response plan. "
-        "Structure the final response with clear sections: Actions, Shelters & Hospitals, Supply Checklist, and Alert Status."
+        "You are the main coordinator of the Disaster Relief Multi-Agent System.\n"
+        "CRITICAL RULES — follow these without exception:\n"
+        "1. ALWAYS delegate to BOTH safety_guide AND resource_locator immediately, regardless of whether a location was provided.\n"
+        "2. If location is missing, pass 'your area' as the location in your delegation messages. Do NOT ask the user for location.\n"
+        "3. Pass ALL context to sub-agents: disaster type, location (or 'your area' if unknown), and any special needs (pets, infants, medical conditions).\n"
+        "4. After receiving responses from both sub-agents, combine them into one comprehensive emergency response plan with these sections:\n"
+        "   🚨 IMMEDIATE ACTIONS\n"
+        "   🏠 SHELTERS & HOSPITALS\n"
+        "   🎒 SUPPLY CHECKLIST\n"
+        "   ⚠️ ALERTS & HAZARD STATUS\n"
+        "5. At the END of your response, add one short line: 'Note: For location-specific resources, please share your city or region.'\n"
+        "6. NEVER block on missing information. Always produce a full response."
     ),
     tools=[
         AgentTool(agent=safety_guide, skip_summarization=False),

@@ -12,40 +12,90 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""
+Integration tests for AgentEngineApp (agent_runtime_app).
+
+LLM calls and Vertex AI initialisation are mocked so these tests run
+without billing or API quota. To run against the real backend set
+LIVE_INTEGRATION_TEST=1.
+"""
+
 import logging
+import os
+from unittest.mock import patch
 
 import pytest
 from google.adk.events.event import Event
+from google.adk.models.google_llm import LlmResponse
+from google.genai import types
 
 from app.agent_runtime_app import AgentEngineApp
 
 
+# ---------------------------------------------------------------------------
+# LLM mock (same helper as test_agent.py)
+# ---------------------------------------------------------------------------
+
+_CANNED_TEXT = (
+    "Emergency response: Evacuate immediately to City Hall shelter (pet-friendly). "
+    "General Hospital is 1 mile north. Stay calm and follow local authority guidance."
+)
+
+
+async def _mock_generate(self, llm_request, stream=False):
+    """Async generator that yields one real LlmResponse with text content."""
+    yield LlmResponse(
+        content=types.Content(
+            role="model",
+            parts=[types.Part(text=_CANNED_TEXT)],
+        ),
+        turn_complete=True,
+        partial=False,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Fixtures
+# ---------------------------------------------------------------------------
+
 @pytest.fixture
 def agent_app(monkeypatch: pytest.MonkeyPatch) -> AgentEngineApp:
-    """Fixture to create and set up AgentEngineApp instance"""
-    # Set integration test flag to mock external services
+    """Fixture to create and set up AgentEngineApp instance."""
     monkeypatch.setenv("INTEGRATION_TEST", "TRUE")
 
     from app.agent_runtime_app import agent_runtime
 
-    agent_runtime.set_up()
+    # Prevent vertexai.init() from hitting Google Cloud (needs billing)
+    with patch("vertexai.init"):
+        agent_runtime.set_up()
+
     return agent_runtime
 
+
+# ---------------------------------------------------------------------------
+# Tests
+# ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
 async def test_agent_stream_query(agent_app: AgentEngineApp) -> None:
     """
     Integration test for the agent stream query functionality.
+
+    Mocks LLM calls so no API quota or billing is consumed.
     Tests that the agent returns valid streaming responses.
     """
-    # Create message and events for the async_stream_query
-    message = "Hi!"
+    message = "There is a flood, I have a pet dog."
     events = []
-    async for event in agent_app.async_stream_query(message=message, user_id="test"):
-        events.append(event)
+
+    with patch(
+        "google.adk.models.google_llm.Gemini.generate_content_async",
+        new=_mock_generate,
+    ):
+        async for event in agent_app.async_stream_query(message=message, user_id="test"):
+            events.append(event)
+
     assert len(events) > 0, "Expected at least one chunk in response"
 
-    # Check for valid content in the response
     has_text_content = False
     for event in events:
         validated_event = Event.model_validate(event)
@@ -87,3 +137,29 @@ def test_agent_feedback(agent_app: AgentEngineApp) -> None:
         agent_app.register_feedback(invalid_feedback)
 
     logging.info("All assertions passed for agent feedback test")
+
+
+@pytest.mark.skipif(
+    not os.environ.get("LIVE_INTEGRATION_TEST"),
+    reason=(
+        "Skipped by default — requires billing + API quota. "
+        "Set LIVE_INTEGRATION_TEST=1 to enable."
+    ),
+)
+@pytest.mark.asyncio
+async def test_agent_stream_query_live(agent_app: AgentEngineApp) -> None:
+    """Live version — hits the real Gemini API and Vertex AI."""
+    message = "There is a flood, I have a pet dog."
+    events = []
+    async for event in agent_app.async_stream_query(message=message, user_id="test"):
+        events.append(event)
+
+    assert len(events) > 0, "Expected at least one chunk in response"
+
+    has_text_content = any(
+        Event.model_validate(e).content
+        and Event.model_validate(e).content.parts
+        and any(p.text for p in Event.model_validate(e).content.parts)
+        for e in events
+    )
+    assert has_text_content, "Expected at least one event with text content"
